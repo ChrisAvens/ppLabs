@@ -17,6 +17,8 @@ class Car:
         # Posición de la cabeza del auto
         self.row = row
         self.col = col
+        self.original_row = row
+        self.original_col = col
         self.boarded = 0
         self.id = None
         self.length = self.get_length()
