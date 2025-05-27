@@ -1,27 +1,37 @@
-import random
 from collections import deque
 
+# Represents a passenger in the line to board a car
 class Passenger:
+
+    # Initializes the passenger with the given color
     def __init__(self, color: str):
         self.color = color
 
-    def __repr__(self):
-        return f"👤{self.color}"
-
+#Manages the line of passengers waiting to board cars in the game
 class PassengerQueue:
     def __init__(self, car_list):
         self.queue = deque()
-        self.generate_passengers_from_cars(car_list)
 
-    def generate_passengers_from_cars(self, cars):
-        passengers = []
-        color_count = {}
-        for car in cars:
-            color_count.setdefault(car.color, 0)
-            color_count[car.color] += car.capacity
+    # Removes and returns the passenger at the front of the queue.
+    def next_passenger(self):
+        if self.queue:
+            return self.queue.popleft()
+        return None
 
-        for color, total in color_count.items():
-            passengers.extend(Passenger(color) for _ in range(total))
+    #Returns next passenger in line without removing them
+    def peek(self):
+        if self.queue:
+            return self.queue[0]
+        return None
 
-        random.shuffle(passengers)
-        self.queue = deque(passengers)
+    #Method to add a custom queue with sintax: 'red','yellow', 'orange'...
+    def insert_custom_queue(self, color_sequence):
+        self.queue = deque(Passenger(color) for color in color_sequence)
+
+    #Method to know if the queue list is empty
+    def is_empty(self):
+        return not self.queue
+
+    #Displays number of passengers left in queue
+    def __len__(self):
+        return len(self.queue)
