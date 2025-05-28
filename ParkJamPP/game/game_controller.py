@@ -1,20 +1,19 @@
-# game/game_controller.py
-
 from game.car import Car, Direction
 from game.platform import PlatformManager
 from game.passenger import PassengerQueue
-import numpy as np
+import numpy as np #Used for efficient operations on the board matrix
 
 
 class GameController:
     def __init__(self):
         self.cars = []
-        self.original_cars = []  # ✅ para guardar copia original
+        self.original_cars = []  # saves original position for reset button
+        #matrix size
         self.rows = 10
         self.cols = 10
-        self.board_matrix = np.zeros((self.rows, self.cols), dtype=int)
-        self.next_car_id = 1
-        self.car_id_map = {}
+        self.board_matrix = np.zeros((self.rows, self.cols), dtype=int) #2D numpy matrix to track which car ID is in which cell
+        self.next_car_id = 1 #Counter for assigning IDs
+        self.car_id_map = {} #Maps car ID to object
         self.load_initial_data()
         self.update_board_matrix()
 
@@ -31,6 +30,7 @@ class GameController:
         # orange cars = 6 orange passengers = 42
         # passenger total = 304
 
+        #Custom passenger queue
         self.passenger_queue.insert_custom_queue([
             'pink', 'pink', 'pink', 'pink',
             'yellow', 'yellow', 'yellow', 'yellow',
@@ -124,6 +124,7 @@ class GameController:
             'pink', 'pink',
         ])
 
+    #Loads car initial data and positions in the board
     def load_initial_data(self):
         candidate_cars = [
 
@@ -181,24 +182,31 @@ class GameController:
 
         ]
 
+        #Checks every car on the list, maps them in the matrix and makes sure none
+        #are getting outside the board, if they are, an error message pops up
         for car in candidate_cars:
             for r, c in self.get_car_cells_static(car):
                 if not (0 <= r < self.rows and 0 <= c < self.cols):
                     raise ValueError(
                         f"Auto {car.color} sobresale del tablero en dirección {car.direction} desde ({car.row}, {car.col})")
+            #Saves car in ID map, assigns ID and increments ID number for next car
             self.car_id_map[self.next_car_id] = car
             car.id = self.next_car_id
             self.next_car_id += 1
+            #Adds to car list and clones to original cars list
             self.cars.append(car)
             self.original_cars = [Car(car.color, car.capacity, car.direction, car.row, car.col)
                                   for car in candidate_cars]
             for c1, c2 in zip(self.original_cars, candidate_cars):
-                c1.id = c2.id  # para mantener ID consistente
+                c1.id = c2.id  # maintains ID consistency by assigning same ID to the original car and the active car
 
-        self.update_board_matrix()
+        self.update_board_matrix() #Rebuilds the board placing cars in their appropiate cells
 
+    #Class for the correct updatig of the board to ensure collisions and cars exiting board
     def update_board_matrix(self):
-        self.board_matrix = np.zeros((self.rows, self.cols), dtype=int)
+        self.board_matrix = np.zeros((self.rows, self.cols), dtype=int) #Reseats the board to zeroes and ensures correct data is processed
+        #Iterates all cars currently on the board and marks cells with the car ID to
+        # ensure collisions and correct depiction of where the car is located
         for car in self.cars:
             cells = self.get_car_cells(car)
             for row, col in cells:
@@ -208,9 +216,10 @@ class GameController:
     def get_car_cells(self, car):
         return self.get_car_cells_static(car)
 
+    #Creates an empty list for the coordinates of the cars depending on their position
     @staticmethod
     def get_car_cells_static(car):
-        """Celdas que ocupa el auto desde su CABEZA hacia atrás"""
+        """Cells that rhe car uses from head to back"""
         cells = []
         for i in range(car.length):
             if car.direction == Direction.UP:
@@ -223,6 +232,9 @@ class GameController:
                 cells.append((car.row, car.col + i))
         return cells
 
+    #Determines if the car has a clear path in front of it, all the
+    # way to the edge of the board by storing all the cells the car currently occupies, then
+    # finds the front-most row or column to build path_cells that check each space ahead of the nose of the car
     def is_path_clear(self, car):
         car_cells = set(self.get_car_cells(car))
         path_cells = []
@@ -253,23 +265,30 @@ class GameController:
 
         return True
 
+    # Tries to move a car off the board and into the platform zone. It checks
     def try_move_car(self, car):
+
+        #For lose popup window when platforms are full
         if self.platform_manager.is_full():
             return "lose"
 
+        #Checks that the path is clear and if the car is still currently in the board
+        # then removes the car from the list of active (on board) cars
         if self.is_path_clear(car):
             if car in self.cars:
                 self.cars.remove(car)
-                self.update_board_matrix()
-                self.platform_manager.add_car_to_platform(car)
+                self.update_board_matrix() #Updates matrix without the cars
+                self.platform_manager.add_car_to_platform(car) #Sends car to boarding platform
 
-                # Nuevo: permitir abordaje si hay coincidencia color al frente
+                # Instantly boards any waiting passenger if color matches
                 self.platform_manager.board_waiting_passengers()
 
                 return "moved"
 
         return "blocked"
 
+
+    # Tells which car is at what position or occupying which cell on the board
     def get_car_at_position(self, row, col):
         if 0 <= row < self.rows and 0 <= col < self.cols:
             car_id = self.board_matrix[row, col]
@@ -277,6 +296,8 @@ class GameController:
                 return self.car_id_map.get(car_id)
         return None
 
+    #Debugging method to find if the cars are appearing correctly in the matrix
+    #gets thats currently on the board and prints it on the console with cars and their direction
     def debug_print_board(self):
         print("\nEstado actual del tablero:")
         for row in range(self.rows):
@@ -297,7 +318,7 @@ class GameController:
             print(f"- {car.color}: {car.direction.value} en ({car.row}, {car.col})")
 
     def reset_game(self):
-        # Clonar autos originales
+        # Clones original cars
         self.cars = [Car(c.color, c.capacity, c.direction, c.original_row, c.original_col)
                      for c in self.original_cars]
         for c1, c2 in zip(self.cars, self.original_cars):
@@ -305,11 +326,11 @@ class GameController:
             c1.original_row = c2.original_row
             c1.original_col = c2.original_col
 
-        # Restaurar mapa e ID
+        # Restores map and ID
         self.car_id_map = {car.id: car for car in self.cars}
         self.update_board_matrix()
 
-        # Resetear plataformas y pasajeros
+        # Resests platforms and all passengers
         self.platform_manager = PlatformManager()
         self.passenger_queue = PassengerQueue(self.cars)
         self.platform_manager.set_passenger_queue(self.passenger_queue)
