@@ -1,6 +1,6 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QMessageBox, QGraphicsOpacityEffect, QFrame
-from PyQt6.QtGui import QFont, QPixmap, QTransform, QIcon
+from PyQt6.QtGui import QPixmap, QTransform, QIcon
 from PyQt6.QtCore import Qt, QPropertyAnimation, QPoint, QEasingCurve, QTimer, QUrl
 from PyQt6.QtMultimedia import QSoundEffect
 from PyQt6.QtWidgets import QGridLayout
@@ -12,21 +12,21 @@ from game.car import Direction
 class GameWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.cell_size = 30
+        self.cell_size = 30 #pixel size of cells in board
         self.setWindowTitle("ParkJamPP")
-        self.setFixedSize(360, 640)  # Tamaño vertical estilo móvil
+        self.setFixedSize(360, 640)  # Sets screen Size
         self.controller = GameController()
+        # Locally sets parameters for the car´s board
         self.rows = self.controller.rows
         self.cols = self.controller.cols
         self.board_width = self.cols * self.cell_size
         self.board_height = self.rows * self.cell_size
-        self.car_buttons = {}
-        self.platform_widgets = {}  # key: car, value: widget
+        self.car_buttons = {} # Dictionary for the car images
+        self.platform_widgets = {} # Dictionary for the visual widgets of the cars in the platforms
         self.init_sounds()
-        # -- Fondo global sólo para este widget raíz --
-        self.setObjectName("MainBg")  # ① le ponemos un id único
+        self.setObjectName("MainBg")
         self.setStyleSheet("""
-            #MainBg {                         /* ② se aplica SÓLO a este objeto */
+            #MainBg {
                 background-image: url(assets/window_background.png);
                 background-repeat: no-repeat;
                 background-position: center;
@@ -35,13 +35,14 @@ class GameWindow(QWidget):
         """)
 
         self.setup_ui()
-        self.passenger_labels = []  # Guardaremos referencias para actualizarlas fácilmente
+        self.passenger_labels = []
         self.update_passenger_queue_display()
         self.setStyleSheet(
             "QWidget { background-image: url(assets/window_background.png); "
             "background-repeat: no-repeat; background-position: center; background-size: cover; }"
         )
 
+    #Sets up all sound used on the project
     def init_sounds(self):
         self.sound_move = QSoundEffect()
         self.sound_move.setSource(QUrl.fromLocalFile("assets/sounds/car_move.wav"))
@@ -59,25 +60,26 @@ class GameWindow(QWidget):
         self.sound_leave.setSource(QUrl.fromLocalFile("assets/sounds/boarding.wav"))
         self.sound_leave.setVolume(0.8)
 
+    #Ensures sounds can be played on top of each other
     def play_sound(self, path: str, volume: float = 0.8):
         effect = QSoundEffect(self)  # le asignamos self como parent
         effect.setSource(QUrl.fromLocalFile(path))
         effect.setVolume(volume)
         effect.play()
 
-        # Guardar el sonido para que no sea destruido
+        # Saves sound to avoid it getting destroyed
         if not hasattr(self, "active_sounds"):
             self.active_sounds = []
 
         self.active_sounds.append(effect)
 
-        # Eliminar el sonido de la lista cuando termine (aproximadamente)
+        # Removes sound from the list once its over
         QTimer.singleShot(3000, lambda: self.active_sounds.remove(effect))
 
     def setup_ui(self):
         layout = QVBoxLayout()
 
-        # --- ENCABEZADO CON IMAGEN Y BOTÓN AISLADO ---
+        # Top part of the screen layout
         self.header_section = QFrame()
         self.header_section.setFixedSize(360, 80)
         self.header_section.setStyleSheet("""
@@ -91,10 +93,9 @@ class GameWindow(QWidget):
         header_layout.setContentsMargins(10, 0, 10, 0)
         header_layout.setSpacing(10)
 
-        # Espaciador
         header_layout.addStretch()
 
-        # Contenedor del botón (sin heredar fondo)
+        #  container for the reset button
         reset_container = QWidget()
         reset_container.setStyleSheet("background: transparent;")
         reset_layout = QVBoxLayout(reset_container)
@@ -123,7 +124,7 @@ class GameWindow(QWidget):
 
 
 
-        # 3. Fila de pasajeros dentro de fondo personalizado
+        # Passenger queue on personalized background
         self.passenger_background = QWidget()
         self.passenger_background.setFixedSize(360, 60)
         self.passenger_background.setStyleSheet("""
@@ -133,23 +134,20 @@ class GameWindow(QWidget):
             background-size: cover;
         """)
 
-        # Layout dentro del fondo (para los pasajeros)
+        # Layout in background for passengers
         passenger_bg_layout = QHBoxLayout(self.passenger_background)
         passenger_bg_layout.setContentsMargins(10, 0, 10, 0)
         passenger_bg_layout.setSpacing(5)
 
-        # Este layout es el que se va a actualizar dinámicamente
+        # Dynamic updating layout
         self.passenger_queue_layout = QHBoxLayout()
         self.passenger_queue_layout.setContentsMargins(0, 0, 0, 0)
         self.passenger_queue_layout.setSpacing(5)
-
-        # Agregamos el layout real dentro del contenedor con fondo
         passenger_bg_layout.addLayout(self.passenger_queue_layout)
 
-        # Finalmente, agregamos el contenedor al layout principal
         layout.addWidget(self.passenger_background)
 
-        # 4. Contenedor visual de plataformas (centrado)
+        # Visual container for platforms
         self.platform_container = QWidget()
         self.platform_container.setFixedSize(360, 90)
         self.platform_container.setStyleSheet(
@@ -158,7 +156,7 @@ class GameWindow(QWidget):
             "background-size: 100% 100%;"
         )
 
-        # Contenedor intermedio para centrar el contenido
+        # Middle container to be able to center all the contents
         self.platform_layout = QHBoxLayout()
         self.platform_layout.setSpacing(0)
         self.platform_layout.setContentsMargins(5, 5, 5, 5)
@@ -171,11 +169,11 @@ class GameWindow(QWidget):
         self.platform_container.setLayout(centered_layout)
         layout.addWidget(self.platform_container)
 
-        # --- TABLERO VISUAL CON FONDOS Y CUADRÍCULA ---
+        # Car's game board
         self.board_container = QWidget()
         self.board_container.setFixedSize(360, 400)  # Puedes ajustar altura si lo deseas
 
-        # Capa 0: fondo GRASS para todo el área del tablero
+        # Grass background for board area
         grass_label = QLabel(self.board_container)
         grass_label.setPixmap(QPixmap("assets/grass.png").scaled(
             360, 400,
@@ -185,7 +183,7 @@ class GameWindow(QWidget):
         grass_label.setGeometry(0, 0, 360, 400)
         grass_label.lower()
 
-        # Capa 1: contenedor del tablero (solo el área del fondo de la cuadrícula)
+        # Grid backgroung layout
         self.board_foreground = QWidget(self.board_container)
         self.board_foreground.setFixedSize(self.board_width, self.board_height)
 
@@ -194,7 +192,6 @@ class GameWindow(QWidget):
         foreground_y = (400 - self.board_height) // 2
         self.board_foreground.move(foreground_x, foreground_y)
 
-        # Fondo del tablero dentro del área exacta
         self.board_foreground.setStyleSheet("""
             background-image: url(assets/board_background.png);
             background-repeat: no-repeat;
@@ -202,13 +199,12 @@ class GameWindow(QWidget):
             background-size: 100% 100%;
         """)
 
-        # Layout de cuadrícula sobre el fondo
         self.grid_layout = QGridLayout()
         self.grid_layout.setSpacing(0)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self.board_foreground.setLayout(self.grid_layout)
 
-        # Finalmente añadimos al layout principal
+        #Main layout
         board_wrapper = QHBoxLayout()
         board_wrapper.setContentsMargins(0, 0, 0, 0)
         board_wrapper.addStretch(1)
@@ -217,72 +213,75 @@ class GameWindow(QWidget):
 
         layout.addLayout(board_wrapper)
 
-
-        # Finalizar
         self.setLayout(layout)
 
 
-        # Inicializar referencias
+        # Initialize references
         self.passenger_labels = []
         self.car_buttons = {}
 
-        # Dibujar elementos visuales iniciales
+        # Draw initial visual elements
         self.draw_board()
         self.update_passenger_queue_display()
 
+    # Method responsible for updating the visual row of passengers
+    # and showing animations when the front passenger has just boarded a car.
     def update_passenger_queue_display(self):
-        import os
 
         queue = self.controller.passenger_queue.queue
-        # Si la fila está vacía y el juego sigue, mostrar mensaje de victoria
+        # If the queue is empty, show winning message
         if not queue:
-            QMessageBox.information(self, "¡Victoria!", "¡Ganaste, juego completado!")
+            QMessageBox.information(self, "Well done!", "¡You win, game completed!")
 
         labels_existentes = getattr(self, "passenger_labels", [])
 
-        # Checar si el pasajero al frente cambió (se abordó)
+        # Checks if the passenger in front already boarded
         should_animate = False
         if labels_existentes and labels_existentes[0] and queue:
             first_color_before = labels_existentes[0].accessibleName()
             first_color_now = queue[0].color
-            if first_color_before != first_color_now:
+            #Plays animation only if the next passenger is a different color
+            if first_color_before != first_color_now :
                 should_animate = True
                 label_to_animate = labels_existentes[0]
                 self.animate_passenger_boarding(label_to_animate)
 
         if should_animate:
-            # Esperar 600 ms para dejar que se vea la animación antes de refrescar
-            QTimer.singleShot(600, lambda: self._refresh_passenger_queue(queue))
+            # Waits some seconds before animating
+            QTimer.singleShot(300, lambda: self._refresh_passenger_queue(queue))
         else:
             self._refresh_passenger_queue(queue)
 
+    # Logic to clean and redraw passengers on the line
     def _refresh_passenger_queue(self, queue):
         import os
 
-        # Limpiar visualmente la fila
+        # Clean the line visually
         for i in reversed(range(self.passenger_queue_layout.count())):
             widget = self.passenger_queue_layout.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
 
-        self.passenger_labels = []
+        self.passenger_labels = [] # Resets the list that tracks QLabel widgets for passengers
 
-        # Solo mostrar los primeros 9 pasajeros
+        # Draw only the first 9 passengers on the lis by turning the queue into a list
         visible_passengers = list(queue)[:9]
 
+        # Draws a new QLabel for each passenger and tries to assign them their image
         for passenger in visible_passengers:
             label = QLabel()
             img_path = f"assets/passengers/{passenger.color}.png"
 
-            if not os.path.exists(img_path):
-                print(f"⚠ Imagen de pasajero no encontrada: {img_path}")
-                label.setText("👤")
+            if not os.path.exists(img_path): # For debugging when an image is not found in the files, it would show "----"
+                print(f"Imagen de pasajero no encontrada: {img_path}")
+                label.setText("----")
                 label.setStyleSheet(f"color: {passenger.color};")
-            else:
+            else: # If ian image is found it loads the image, resizes it, and puts it into the label
                 pixmap = QPixmap(img_path).scaled(52, 52, Qt.AspectRatioMode.KeepAspectRatio,
                                                   Qt.TransformationMode.SmoothTransformation)
                 label.setPixmap(pixmap)
 
+            # GIves format to lavel so they are the correct size, centered and with no background
             label.setFixedSize(56, 56)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setAccessibleName(passenger.color)
@@ -290,31 +289,32 @@ class GameWindow(QWidget):
             self.passenger_queue_layout.addWidget(label)
             self.passenger_labels.append(label)
 
-    def debug_board(self):
-        """Función de depuración para imprimir el estado del tablero"""
-        print("Estado actual del tablero:")
-        self.controller.debug_print_board()
+    #Function to debug de board
+    #def debug_board(self):
+        #print("Estado actual del tablero:")
+        #self.controller.debug_print_board()
 
         # Mostrar posiciones visuales vs. lógicas para mejor depuración
-        print("\nPosiciones lógicas vs. visuales de los autos:")
-        for car in self.controller.cars:
+        #print("\nPosiciones lógicas vs. visuales de los autos:")
+        #for car in self.controller.cars:
             # Obtener celdas ocupadas por el auto según el controlador
-            cells = self.controller.get_car_cells(car)
+            #cells = self.controller.get_car_cells(car)
             # Obtener posición visual para dibujar
-            visual_row, visual_col = car.get_visual_position()
-            print(f"- {car.color} ({car.capacity}): dirección {car.direction.value}")
-            print(f"  Posición lógica (cabeza): ({car.row}, {car.col})")
-            print(f"  Posición visual: ({visual_row}, {visual_col})")
-            print(f"  Celdas ocupadas: {cells}")
+            #visual_row, visual_col = car.get_visual_position()
+            #print(f"- {car.color} ({car.capacity}): dirección {car.direction.value}")
+            #print(f"  Posición lógica (cabeza): ({car.row}, {car.col})")
+            #print(f"  Posición visual: ({visual_row}, {visual_col})")
+            #print(f"  Celdas ocupadas: {cells}")
 
+    # Method is responsible for rendering the entire game board: grid cells, cars, and updating platform visuals
     def draw_board(self):
-        # Limpiar el tablero actual
+        # Removes all items from the layout by iterating backwards to ensure the board starts clean
         for i in reversed(range(self.grid_layout.count())):
             self.grid_layout.itemAt(i).widget().setParent(None)
 
-        self.car_buttons = {}
+        self.car_buttons = {} #Clears internal directory of caar buttons
 
-        # Colocar placeholders en cada celda
+        # Creates a visual grid on the board using placeholders in every cell
         for row in range(self.rows):
             for col in range(self.cols):
                 placeholder = QLabel("")
@@ -322,17 +322,18 @@ class GameWindow(QWidget):
                 placeholder.setStyleSheet("border: 1px solid #999; background-color: transparent;")
                 self.grid_layout.addWidget(placeholder, row, col)
 
-        # Dibujar los autos
+        # Loops through every car in game controller
         for car in self.controller.cars:
-            # Obtener la imagen del auto
+            # Dynamically generates the path to every car´s image and skips render if the image is not found
             image_path = f"assets/cars/{car.color}car{car.capacity}.png"
             if not os.path.exists(image_path):
-                print(f"⚠ Imagen no encontrada: {image_path}")
+                print(f"Imagen no encontrada: {image_path}")
                 continue
 
+            # Loads image as pixmap
             pixmap = QPixmap(image_path)
 
-            # Rotar la imagen según la dirección
+            # Rotates the image according to the direction the car is facing
             angle = {
                 Direction.UP: 0,
                 Direction.RIGHT: 90,
@@ -342,51 +343,51 @@ class GameWindow(QWidget):
 
             rotated_pixmap = pixmap.transformed(QTransform().rotate(angle))
 
-            # Calcular dimensiones según la dirección
+            # Calculates de dimension of the image according to the direction
             width = self.cell_size if car.direction in [Direction.UP, Direction.DOWN] else self.cell_size * car.length
             height = self.cell_size * car.length if car.direction in [Direction.UP, Direction.DOWN] else self.cell_size
 
-            # Escalar la imagen
+            # Scales the image
             scaled_pixmap = rotated_pixmap.scaled(width, height, Qt.AspectRatioMode.IgnoreAspectRatio,
                                                   Qt.TransformationMode.SmoothTransformation)
 
-            # Crear botón del auto
+            # Creates the car button
             car_button = QPushButton()
-            car_button.setIcon(QIcon(scaled_pixmap))
+            car_button.setIcon(QIcon(scaled_pixmap)) #Uses the cars image as the button´s icon
+            # Size is set to match with the car´s scales image
             car_button.setIconSize(scaled_pixmap.size())
             car_button.setFixedSize(width, height)
             car_button.setStyleSheet("background: transparent; border: none;")
+            # Clicking the car triggers try_move_car in the specific car (lambda to put that car in a loop)
             car_button.clicked.connect(lambda _, c=car: self.try_move_car(c))
 
-            # Obtener la posición visual para el dibujado
+            # Determines where to place the button based on the head of the car
             visual_row, visual_col = car.get_visual_position()
 
-            # Posicionar el botón en el grid usando la posición visual
+            # Places the button on the grid using the visual position
             self.grid_layout.addWidget(car_button, visual_row, visual_col,
-                                       car.length if car.direction in [Direction.UP, Direction.DOWN] else 1,
-                                       car.length if car.direction in [Direction.LEFT, Direction.RIGHT] else 1)
+                                       car.length if car.direction in [Direction.UP, Direction.DOWN] else 1, # Vertical car, spans multiple rows
+                                       car.length if car.direction in [Direction.LEFT, Direction.RIGHT] else 1) # Horizontal car, spans multiple columns
 
-            self.car_buttons[car] = car_button
+            self.car_buttons[car] = car_button # Stores button reference in a dictionary so it can be accesed later
 
-        # Actualizar plataformas
+        # Updates
         self.update_platforms()
 
     def update_platforms(self):
-        from PyQt6.QtWidgets import QVBoxLayout, QLabel, QWidget
-        from PyQt6.QtCore import QPropertyAnimation, QTimer, QPoint
-        from PyQt6.QtWidgets import QGraphicsOpacityEffect
 
-        current_cars = self.controller.platform_manager.get_platform_cars()
+        current_cars = self.controller.platform_manager.get_platform_cars() # Pulls list of cars currently in platform
 
         if not hasattr(self, "platform_previous_state"):
             self.platform_previous_state = {}
 
+        # Determine which cars are gone
         new_state = {}
-        old_cars = set(self.platform_widgets.keys())
-        new_cars = set(current_cars)
-        disappeared = old_cars - new_cars
+        old_cars = set(self.platform_widgets.keys()) #old_cars: cars from previous draw (tracked in self.platform_widgets)
+        new_cars = set(current_cars) # Cars currently in platofrms
+        disappeared = old_cars - new_cars # Cars that were there but disappeared
 
-        # Autos que se fueron naturalmente
+        # For every car that is ready to disappear, plays a fadeout animation but dpes not remove widget just yet
         for car in disappeared:
             widget = self.platform_widgets.get(car)
             if widget:
@@ -398,9 +399,9 @@ class GameWindow(QWidget):
                 fade.setEndValue(0.0)
                 fade.setEasingCurve(QEasingCurve.Type.OutCubic)
                 fade.start()
-                self.play_sound("assets/sounds/leave_platform.wav", 0.8)
+                self.play_sound("assets/sounds/leave_platform.wav", 0.8) # Plays sound to cue when car leaves
 
-        # Limpiar visual pero mantener lógica
+        # Clears widgets visually but not logically
         for i in reversed(range(self.platform_layout.count())):
             widget = self.platform_layout.itemAt(i).widget()
             if widget:
@@ -409,20 +410,24 @@ class GameWindow(QWidget):
         self.platform_widgets.clear()
         cars_to_remove_later = []
 
+        # Redraws all 6 slots in the platform
         for idx in range(6):
             slot_container = QWidget()
             slot_container.setStyleSheet("background: transparent;")
             slot_container.setFixedSize(60, 80)
-            slot_layout = QVBoxLayout(slot_container)
+            slot_layout = QVBoxLayout(slot_container) # Container slots
             slot_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             slot_layout.setSpacing(2)
             slot_layout.setContentsMargins(0, 0, 0, 0)
 
+            #If a car is found
             if idx < len(current_cars):
                 car = current_cars[idx]
+                # Gets image for the car dynamically
                 image_path = f"assets/cars/platform_{car.color}car{car.capacity}.png"
                 pixmap = QPixmap(image_path)
 
+                # Creates a QLabel for the car image
                 car_label = QLabel()
                 car_label.setPixmap(pixmap)
                 car_label.setFixedSize(60, 40)
@@ -432,18 +437,21 @@ class GameWindow(QWidget):
                 previous = self.platform_previous_state.get(car, 0)
                 current = car.boarded
 
-                # Mostrar contador o DONE!
+                # Creates a second label to count passengers boarded
                 counter_label = QLabel()
+                # For when a car is fully boarded (never really got it to work)
                 if car.boarded == car.capacity and previous < car.capacity:
-                    counter_label.setText("DONE! ✅")
+                    counter_label.setText("DONE!")
                     counter_label.setStyleSheet("color: limegreen; font-size: 10pt; font-weight: bold;")
                     cars_to_remove_later.append((car, slot_container))
+                # For when a car is not fully boarded, displays how many passengers are left
                 else:
                     counter_label.setText(f"{car.boarded}/{car.capacity}")
                     counter_label.setStyleSheet("color: white; font-size: 10pt;")
 
                 counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+                # Adds both labels to the layout
                 slot_layout.addWidget(car_label)
                 slot_layout.addWidget(counter_label)
 
@@ -451,9 +459,11 @@ class GameWindow(QWidget):
                 self.platform_widgets[car] = slot_container
                 new_state[car] = current
 
+                # Plays boarding sound only if number of passengers increased
                 if current > previous:
                     self.play_sound("assets/sounds/boarding.wav", 0.6)
 
+                # Delays car appearance so the animations can play properly
                 if car not in old_cars:
                     def animate_appearance(widget=slot_container):
                         opacity = QGraphicsOpacityEffect()
@@ -479,14 +489,14 @@ class GameWindow(QWidget):
                         anim_pos.start()
 
                     QTimer.singleShot(1, animate_appearance)
-            else:
-                placeholder = QLabel()
+            else: # If spot is empty
+                placeholder = QLabel() # Adds a transparent placeholder to keep alignment
                 placeholder.setFixedSize(60, 40)
                 placeholder.setStyleSheet("background: transparent;")
                 slot_layout.addWidget(placeholder)
                 self.platform_layout.addWidget(slot_container)
 
-        # Animaciones de salida para autos llenos (espera 3 segundos)
+        # Exit animations for cars with delay
         for car, widget_ref in cars_to_remove_later:
             def animate_departure(car_ref=car, widget=widget_ref):
                 if car_ref in self.platform_widgets:
@@ -510,49 +520,50 @@ class GameWindow(QWidget):
 
                     fade.start()
                     anim_pos.start()
-                    self.play_sound("assets/sounds/leave_platform.wav", 0.8)
+                    self.play_sound("assets/sounds/leave_platform.wav", 0.8) # Plays car leaving sound cue
 
-                    def remove_widget():
+                    def remove_widget():    #Deletes the widget
                         widget.setParent(None)
                         if car_ref in self.platform_widgets:
                             del self.platform_widgets[car_ref]
 
                     QTimer.singleShot(600, remove_widget)
 
-            QTimer.singleShot(3000, animate_departure)  # 🕒 ¡Ahora espera 3 segundos!
+            QTimer.singleShot(3000, animate_departure)  # Waits three seconds to animate
 
-        self.platform_previous_state = new_state
+        self.platform_previous_state = new_state # Saves the new state of the platform
 
+    # Attempts to move a car on a board and checks if it is possible
     def try_move_car(self, car):
-        """Intenta mover un auto cuando el usuario hace clic en él"""
-        print(f"Intentando mover auto: {car.color} en posición ({car.row}, {car.col}), dirección {car.direction}")
+        """Tries to move a car when the user clicks on it"""
+        print(f"Trying to move car: {car.color} in position ({car.row}, {car.col}), and facing {car.direction}") # Prints on console which car is being moved
 
-        # Verificar si el camino está libre
+        # Verifies if path is clear
         path_clear = self.controller.is_path_clear(car)
-        print(f"¿Camino libre? {path_clear}")
+        print(f"Is path clear? {path_clear}")
 
-        # Intentar mover el auto
+        # Tries to move the car
         result = self.controller.try_move_car(car)
 
-        if result == "moved":
-            print(f"Auto {car.color} movido exitosamente a la plataforma")
+        if result == "moved": # If no obstacles where found
+            print(f"Auto {car.color} Successfully moved to platform")
             self.animate_move(car)
-        elif result == "blocked":
-            print(f"Auto {car.color} bloqueado, no puede moverse")
+        elif result == "blocked": # If there was an obstacle found
+            print(f"Auto {car.color} blocked, can´t move")
             self.animate_blocked(car)
-        elif result == "lose":
-            QMessageBox.critical(self, "¡Juego terminado!", "Ya no hay espacio en las plataformas. Perdiste.")
+        elif result == "lose": # If the platforms are full, losing and closing the game
+            QMessageBox.critical(self, "Game Over!", "No more space in the platforms.")
             self.close()
 
     def animate_move(self, car):
-        """Anima la salida del auto del tablero"""
+        """Animates when a car exits the board"""
         button = self.car_buttons.get(car)
         if not button:
             return
 
-        self.play_sound("assets/sounds/car_move.wav", 0.8)
+        self.play_sound("assets/sounds/car_move.wav", 0.8) # Plays a sound cue to affirm a car has been set free
 
-        # Determinar dirección de movimiento según la dirección del auto
+        # Determines the direction in which the animation will play depending on where the car is pointing
         dx, dy = 0, 0
         offset = 150
         if car.direction == Direction.UP:
@@ -564,14 +575,14 @@ class GameWindow(QWidget):
         elif car.direction == Direction.RIGHT:
             dx = offset
 
-        # Animación de movimiento
+        # MOvement animation
         move_anim = QPropertyAnimation(button, b"pos", self)
         move_anim.setDuration(500)
         move_anim.setStartValue(button.pos())
         move_anim.setEndValue(button.pos() + QPoint(dx, dy))
         move_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
-        # Animación de desvanecimiento
+        # Fade out animation
         opacity = QGraphicsOpacityEffect()
         button.setGraphicsEffect(opacity)
         fade = QPropertyAnimation(opacity, b"opacity", self)
@@ -583,19 +594,19 @@ class GameWindow(QWidget):
         move_anim.start()
         fade.start()
 
-        # Redibujar el tablero después de la animación
+        # Redraw board after animation
         QTimer.singleShot(500, self.draw_board)
         QTimer.singleShot(500, self.update_passenger_queue_display)
 
     def animate_blocked(self, car):
-        """Anima un auto bloqueado que no puede moverse"""
+        """Animates a blocked car that can not move"""
         button = self.car_buttons.get(car)
         if not button:
             return
 
-        self.play_sound("assets/sounds/error.wav", 0.8)
+        self.play_sound("assets/sounds/error.wav", 0.8) #error sound plays
 
-        # Animación de "temblor" para indicar que está bloqueado
+        # Shaking animation for when car is unable to move
         original_pos = button.pos()
         shake_anim = QPropertyAnimation(button, b"pos", self)
         shake_anim.setDuration(300)
@@ -617,7 +628,7 @@ class GameWindow(QWidget):
         if not label:
             return
 
-        # Animación de desvanecimiento
+        # fade out animation
         opacity = QGraphicsOpacityEffect()
         label.setGraphicsEffect(opacity)
         fade = QPropertyAnimation(opacity, b"opacity", self)
@@ -626,7 +637,7 @@ class GameWindow(QWidget):
         fade.setEndValue(0.0)
         fade.setEasingCurve(QEasingCurve.Type.OutQuad)
 
-        # Animación de bajada
+        # Movement animation
         start_pos = label.pos()
         end_pos = start_pos + QPoint(0, 20)
         move = QPropertyAnimation(label, b"pos", self)
@@ -638,9 +649,10 @@ class GameWindow(QWidget):
         fade.start()
         move.start()
 
+    #Redraws everything on the screen when player clicks on reset button
     def restart_game(self):
         self.controller.reset_game()
-        self.draw_board()  # 🔁 Recoloca los autos en el tablero
+        self.draw_board()
         self.update_passenger_queue_display()
         self.update_platforms()
 
